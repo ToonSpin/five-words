@@ -40,33 +40,19 @@ impl Word {
     }
 
     fn is_disjoint_with(self: &Self, other: &Self) -> bool {
-        let mut a = self.word.iter().peekable();
-        let mut b = other.word.iter().peekable();
+        let mut a = 0;
+        let mut b = 0;
 
         loop {
-            if let None = a.peek() {
+            if a == 5 || b == 5 {
                 break;
             }
-            if let None = b.peek() {
-                break;
-            }
-            if a.peek() == b.peek() {
+            if self.word[a] == other.word[b] {
                 return false;
-            } else if a.peek() < b.peek() {
-                a.next();
+            } else if self.word[a] < other.word[b] {
+                a = a + 1;
             } else {
-                b.next();
-            }
-        }
-        true
-    }
-
-    fn is_pairwise_disjoint(word_list: &Vec<Self>) -> bool {
-        for a in 0..word_list.len() {
-            for b in a + 1..word_list.len() {
-                if !word_list[a].is_disjoint_with(&word_list[b]) {
-                    return false;
-                }
+                b = b + 1;
             }
         }
         true
