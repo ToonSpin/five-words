@@ -91,6 +91,7 @@ fn get_disjoint_indices(word_list: &Vec<Word>, sequence_length: usize) -> Vec<Ve
             sequence_length,
             vec![],
             vec![i],
+            &(0..word_list.len()).collect()
         ));
     }
     result
@@ -101,6 +102,7 @@ fn get_disjoint_indices_partial(
     sequence_length: usize,
     mut partial: Vec<Vec<usize>>,
     mut state: Vec<usize>,
+    valid_indices: &Vec<usize>
 ) -> Vec<Vec<usize>> {
     if state.len() == sequence_length {
         print!("Found:");
@@ -112,16 +114,19 @@ fn get_disjoint_indices_partial(
         return partial;
     }
 
-    let last_index = state.last().expect("state must not be empty");
+    let last_index = *state.last().expect("state must not be empty");
+    let new_valid_indices: Vec<usize> = valid_indices.iter().filter(|&i| word_list[last_index].is_disjoint_with(&word_list[*i])).cloned().collect();
 
-    'next_index: for next_index in last_index + 1..word_list.len() {
-        for index in state.iter() {
-            if !word_list[*index].is_disjoint_with(&word_list[next_index]) {
-                continue 'next_index;
-            }
-        }
-        state.push(next_index);
-        partial = get_disjoint_indices_partial(word_list, sequence_length, partial, state.clone());
+    // if state.len() < 3 {
+    //     for _i in 0..state.len() {
+    //         print!("  ")
+    //     }
+    //     println!("length of new_valid_indices: {:?}", new_valid_indices.len());
+    // }
+
+    for next_index in new_valid_indices.iter().filter(|&i| *i >= last_index) {
+        state.push(*next_index);
+        partial = get_disjoint_indices_partial(word_list, sequence_length, partial, state.clone(), &new_valid_indices);
         state.pop();
     }
     partial
