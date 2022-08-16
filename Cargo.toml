@@ -8,3 +8,4 @@ authors = ["Toon Spin"]
 
 [dependencies]
 clap = { version = "3.2.17", features = ["derive"] }
+indicatif = "0.17.0"
