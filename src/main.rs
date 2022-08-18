@@ -1,18 +1,23 @@
 use clap::Parser;
 use core::hash::{Hash, Hasher};
-use indicatif::ParallelProgressIterator;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 
+/// This program reads a list of lowercase ASCII words, and produces a list of
+/// tab-separated combinations of words that don't have any characters in
+/// common. Any anagrams of words in the list are not considered. The word list
+/// is read from standard input, or it can be specified with the -i option. It
+/// is inspired by this video: https://www.youtube.com/watch?v=_-AfhLQfb6w
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The path to a file with a list of words
     #[clap(short, long, value_parser)]
-    input_file: std::path::PathBuf,
+    input_file: Option<std::path::PathBuf>,
 
     /// Show a progress indicator on standard error
     #[clap(short, long, action, conflicts_with = "verbose")]
@@ -212,8 +217,16 @@ fn get_words<T: Read>(mut input_reader: T, args: &Args) -> std::io::Result<Vec<W
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let input_file = File::open(args.input_file.clone())?;
-    let word_list = get_words(input_file, &args)?;
+
+    let word_list = if let None = args.input_file {
+        get_words(std::io::stdin(), &args)?
+    } else if args.input_file == Some(PathBuf::from("-")) {
+        get_words(std::io::stdin(), &args)?
+    } else {
+        let input_file = File::open(args.input_file.as_ref().unwrap().clone())?;
+        get_words(input_file, &args)?
+    };
+
     for sequence in get_disjoint_indices(&word_list, 5, &args).iter() {
         for i in 0..5 {
             if i > 0 {
