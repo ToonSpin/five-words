@@ -64,7 +64,8 @@ impl Word {
 
     /// Returns `true` if the two `Word`s do not have any characters in common.
     /// This function assumes that `word` is sorted for both `Word`s.
-    fn is_disjoint_with(self: &Self, other: &Self) -> bool {
+    #[allow(clippy::comparison_chain)]
+    fn is_disjoint_with(&self, other: &Self) -> bool {
         let mut a = 0;
         let mut b = 0;
 
@@ -75,9 +76,9 @@ impl Word {
             if self.word[a] == other.word[b] {
                 return false;
             } else if self.word[a] < other.word[b] {
-                a = a + 1;
+                a += 1;
             } else {
-                b = b + 1;
+                b += 1;
             }
         }
         true
@@ -92,7 +93,7 @@ fn all_characters_unique(word: &[u8]) -> bool {
             return false;
         }
     }
-    return true;
+    true
 }
 
 fn get_disjoint_indices(
@@ -116,7 +117,7 @@ fn get_disjoint_indices(
         .progress_with(bar)
         .map(|i| {
             get_disjoint_indices_partial(
-                &word_list,
+                word_list,
                 sequence_length,
                 args.verbose,
                 vec![],
@@ -128,6 +129,7 @@ fn get_disjoint_indices(
     result.flatten().collect()
 }
 
+#[allow(clippy::ptr_arg)]
 fn get_disjoint_indices_partial(
     word_list: &Vec<Word>,
     sequence_length: usize,
@@ -146,7 +148,7 @@ fn get_disjoint_indices_partial(
             for i in state.iter() {
                 eprint!(" {}", word_list[*i].original_word);
             }
-            eprintln!("");
+            eprintln!();
         }
         partial.push(state);
         return partial;
@@ -218,9 +220,7 @@ fn get_words<T: Read>(mut input_reader: T, args: &Args) -> std::io::Result<Vec<W
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    let word_list = if let None = args.input_file {
-        get_words(std::io::stdin(), &args)?
-    } else if args.input_file == Some(PathBuf::from("-")) {
+    let word_list = if args.input_file.is_none() || args.input_file == Some(PathBuf::from("-")) {
         get_words(std::io::stdin(), &args)?
     } else {
         let input_file = File::open(args.input_file.as_ref().unwrap().clone())?;
@@ -234,7 +234,7 @@ fn main() -> std::io::Result<()> {
             }
             print!("{}", word_list[sequence[i]].original_word);
         }
-        println!("");
+        println!();
     }
     Ok(())
 }
