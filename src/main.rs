@@ -1,6 +1,8 @@
 use clap::Parser;
 use core::hash::{Hash, Hasher};
+use indicatif::ParallelProgressIterator;
 use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
@@ -13,11 +15,11 @@ struct Args {
     input_file: std::path::PathBuf,
 
     /// Show a progress indicator on standard error
-    #[clap(short, long, action)]
+    #[clap(short, long, action, conflicts_with = "verbose")]
     progress: bool,
 
-    /// Add extra output to standard error
-    #[clap(short, long, action)]
+    /// Add extra output to standard error, can't be used with a progress bar
+    #[clap(short, long, action, conflicts_with = "progress")]
     verbose: bool,
 }
 
@@ -55,6 +57,8 @@ impl Word {
         }
     }
 
+    /// Returns `true` if the two `Word`s do not have any characters in common.
+    /// This function assumes that `word` is sorted for both `Word`s.
     fn is_disjoint_with(self: &Self, other: &Self) -> bool {
         let mut a = 0;
         let mut b = 0;
@@ -75,6 +79,8 @@ impl Word {
     }
 }
 
+/// Returns `true` if the array has no duplicate values. This function assumes
+/// that `word` is sorted.
 fn all_characters_unique(word: &[u8]) -> bool {
     for i in 1..word.len() {
         if word[i - 1] == word[i] {
@@ -89,36 +95,32 @@ fn get_disjoint_indices(
     sequence_length: usize,
     args: &Args,
 ) -> Vec<Vec<usize>> {
-    let bar = if args.verbose || !args.progress {
-        ProgressBar::hidden()
+    let word_list_len = word_list.len();
+    let bar = if args.progress {
+        ProgressBar::new(word_list_len.try_into().unwrap()).with_style(
+            ProgressStyle::default_bar()
+                .template("{elapsed_precise} {wide_bar} {percent}%")
+                .unwrap(),
+        )
     } else {
-        ProgressBar::new(word_list.len().try_into().unwrap())
+        ProgressBar::hidden()
     };
-    bar.set_style(
-        ProgressStyle::default_bar()
-            .template("{elapsed_precise} {wide_bar} {percent}%")
-            .unwrap(),
-    );
-    let mut result = Vec::new();
-    for i in 0..word_list.len() {
-        bar.inc(1);
-        if args.verbose && args.progress {
-            eprint!("{}/{}\r", i, word_list.len());
-        }
-        result.append(&mut get_disjoint_indices_partial(
-            &word_list,
-            sequence_length,
-            args.verbose,
-            vec![],
-            vec![i],
-            &(0..word_list.len()).collect(),
-        ));
-    }
-    if args.verbose && args.progress {
-        eprintln!("");
-    }
-    bar.finish();
-    result
+
+    let result = (0..word_list_len)
+        .into_par_iter()
+        .progress_with(bar)
+        .map(|i| {
+            get_disjoint_indices_partial(
+                &word_list,
+                sequence_length,
+                args.verbose,
+                vec![],
+                vec![i],
+                &(0..word_list_len).collect(),
+            )
+        });
+
+    result.flatten().collect()
 }
 
 fn get_disjoint_indices_partial(
@@ -129,6 +131,10 @@ fn get_disjoint_indices_partial(
     mut state: Vec<usize>,
     valid_indices: &Vec<usize>,
 ) -> Vec<Vec<usize>> {
+    // Found a match. Further down this function, all the combinations of words
+    // that are not disjoint are filtered out. This means that non-disjoint
+    // combinations are not considered at all, so if the state has the desired
+    // length then it is guaranteed to be pairwise disjoint.
     if state.len() == sequence_length {
         if verbose {
             eprint!("Found:");
@@ -141,6 +147,9 @@ fn get_disjoint_indices_partial(
         return partial;
     }
 
+    // First, prune all words in the valid indices that are disjoint with the
+    // last word in the state. This is done here so the calling function
+    // get_disjoint_indices doesn't have to do it.
     let last_index = *state.last().expect("state must not be empty");
     let new_valid_indices: Vec<usize> = valid_indices
         .iter()
@@ -148,6 +157,7 @@ fn get_disjoint_indices_partial(
         .cloned()
         .collect();
 
+    // The filter is here because otherwise there would be duplicate results.
     for next_index in new_valid_indices.iter().filter(|&i| *i >= last_index) {
         state.push(*next_index);
         partial = get_disjoint_indices_partial(
@@ -160,6 +170,7 @@ fn get_disjoint_indices_partial(
         );
         state.pop();
     }
+
     partial
 }
 
@@ -179,6 +190,8 @@ fn get_words<T: Read>(mut input_reader: T, args: &Args) -> std::io::Result<Vec<W
 
         let word = Word::new(bytes.clone().try_into().unwrap(), String::from(line));
 
+        // This check is not strictly necessary to insert the Word, but it's
+        // here because of the verbose output, to debug the anagram logic.
         if word_set.contains(&word) {
             if args.verbose {
                 let existing = word_set.get(&word).unwrap();
