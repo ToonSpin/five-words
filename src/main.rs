@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The path to a file with a list of words
@@ -21,7 +21,6 @@ struct Args {
     verbose: bool,
 }
 
-#[derive(Debug)]
 struct Word {
     word: [u8; 5],
     original_word: String,
@@ -29,15 +28,23 @@ struct Word {
 
 impl Hash for Word {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        // Only consider the sorted bytes when hashing the Word, because we're
+        // also storing the original word. It's not desirable for that to be
+        // part of the hash, because otherwise we would be storing all the
+        // anagrams of this Word in the set, too.
         self.word.hash(state);
     }
 }
 
 impl PartialEq for Word {
+    // Only consider the sorted bytes when comparing Words, because it's
+    // desireable for anagrams of the original words to be equal, not
+    // different.
     fn eq(&self, other: &Self) -> bool {
         self.word == other.word
     }
 }
+
 impl Eq for Word {}
 
 impl Word {
@@ -158,27 +165,33 @@ fn get_disjoint_indices_partial(
 
 fn get_words<T: Read>(mut input_reader: T, args: &Args) -> std::io::Result<Vec<Word>> {
     let mut word_set: HashSet<Word> = HashSet::new();
-    let mut word_list = String::new();
-    input_reader.read_to_string(&mut word_list)?;
-    for line in word_list.lines().filter(|l| l.len() == 5) {
+    let mut input = String::new();
+
+    input_reader.read_to_string(&mut input)?;
+
+    for line in input.lines().filter(|l| l.len() == 5) {
         let mut bytes = line.as_bytes().to_vec();
         bytes.sort();
-        if all_characters_unique(&bytes) {
-            let word = Word::new(bytes.clone().try_into().unwrap(), String::from(line));
-            if word_set.contains(&word) {
+
+        if !all_characters_unique(&bytes) {
+            continue;
+        }
+
+        let word = Word::new(bytes.clone().try_into().unwrap(), String::from(line));
+
+        if word_set.contains(&word) {
+            if args.verbose {
                 let existing = word_set.get(&word).unwrap();
-                if args.verbose {
-                    eprintln!(
-                        "An anagram of the word {} is already in the list ({}).",
-                        word.original_word, existing.original_word
-                    );
-                }
-            } else {
-                if args.verbose {
-                    eprintln!("Adding the word {} to the list.", word.original_word);
-                }
-                word_set.insert(word);
+                eprintln!(
+                    "An anagram of the word {} is already in the list ({}).",
+                    word.original_word, existing.original_word
+                );
             }
+        } else {
+            if args.verbose {
+                eprintln!("Adding the word {} to the list.", word.original_word);
+            }
+            word_set.insert(word);
         }
     }
     Ok(word_set.into_iter().collect())
