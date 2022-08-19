@@ -9,15 +9,14 @@ use std::path::PathBuf;
 
 /// This program reads a list of lowercase ASCII words, and produces a list of
 /// tab-separated combinations of words that don't have any characters in
-/// common. Any anagrams of words in the list are not considered. The word list
-/// is read from standard input, or it can be specified with the -i option. It
-/// is inspired by this video: https://www.youtube.com/watch?v=_-AfhLQfb6w
+/// common. Any anagrams of words in the list are not considered. It is
+/// inspired by this video: https://www.youtube.com/watch?v=_-AfhLQfb6w
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// The path to a file with a list of words
-    #[clap(short, long, value_parser)]
-    input_file: Option<std::path::PathBuf>,
+    /// The path to a file with a list of words, or "-" to read from standard input
+    #[clap(value_parser)]
+    input_file: std::path::PathBuf,
 
     /// Show a progress indicator on standard error
     #[clap(short, long, action, conflicts_with = "verbose")]
@@ -220,10 +219,10 @@ fn get_words<T: Read>(mut input_reader: T, args: &Args) -> std::io::Result<Vec<W
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    let word_list = if args.input_file.is_none() || args.input_file == Some(PathBuf::from("-")) {
+    let word_list = if args.input_file == PathBuf::from("-") {
         get_words(std::io::stdin(), &args)?
     } else {
-        let input_file = File::open(args.input_file.as_ref().unwrap().clone())?;
+        let input_file = File::open(args.input_file.clone())?;
         get_words(input_file, &args)?
     };
 
